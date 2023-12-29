@@ -17,15 +17,21 @@ def write(prompt: str):
             yield text_chunk
 
 # Generate a text stream
-text_stream = write("A five sentence story about The Fonz and his cool adventures.")
+text = "A five sentence story about The Fonz and his cool adventures."
+text_stream = write(text)
 
 # Convert the text stream to an audio stream
+#    stream=True,
+#    latency=4,
+#    text=text_stream,
 audio_stream = elevenlabs.generate(
-    text=text_stream,
-    voice="Thomas",
-    stream=True,
-    latency=4,
+    text = text,
+    voice="Sarah",
+    model="eleven_multilingual_v2",
 )
 
 # Stream the audio
-output = elevenlabs.stream(audio_stream)
+# requires mpv
+#output = elevenlabs.stream(audio_stream)
+
+elevenlabs.save(audio_stream, "speech.mp3")
