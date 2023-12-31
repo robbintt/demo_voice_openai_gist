@@ -5,6 +5,7 @@ TODO:
 
 Conda Environment:
     This is generated from tortoise-tts setup and then `pip install openai`
+    deepspeed was apparently removed, i installed and it doesn't seem to work.
     conda activate tortoise
 """
 import os
@@ -30,7 +31,7 @@ half = True # float 16 / half precision (True for half / faster)
 produce_debug_state = True
 preset = "ultra_fast" # high_quality, standard, fast, ultra_fast
 voice = ["emma"]
-use_deepspeed = True
+use_deepspeed = False # It was apparently removed due to problems: https://github.com/neonbjb/tortoise-tts/issues/608
 # check use_deepspeed
 if torch.backends.mps.is_available():
     print("Warning: Deepspeed not available, resetting to deepspeed=False.")
@@ -127,15 +128,6 @@ def manual_input_loop():
             break
     return
 
-def collect_audio_segment(gpt4_generator):
-    ''' Collect enough audio from the buffer for context but not too many tokens for the model.
-
-    We are not concerned about any other maxima, but we want as much as possible.
-    Another constraint would be the wait time per segment,
-    but it is a tradeoff with context/quality so discarding for now.
-    '''
-
-
 # gpt4 generated and debugged its own code here
 def gpt4_generate(prompt: str):
     ''' yield each piece of text from GPT-4
@@ -157,28 +149,55 @@ if __name__ == "__main__":
     #content = "As the ship hurtled towards the rogue planet, Alvarez initiated a risky gambit, overriding the AI with a forgotten command code, gambling the fate of thousands on a hunch about the ship's ancient, hidden protocols."
     #generate_audio(content)
 
-    # set from direnv/.envrc
+    # setup openai client set from direnv/.envrc
     openai_client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
 
+    # setup output directory
     os.makedirs(output_path, exist_ok=True)
 
-    # Generate a text stream
-    prompt = "Write a 4 sentence scifi story segment from the climax of a generation ship scifi thriller."
-
-    text_generator = gpt4_generate(prompt)
-
-    text_ready = False
-    while not text_ready:
-        collect_audio_segment(text_generator)
-        print(text_generator)
-        time.sleep(0.1)
-
-    '''
+    # setup object
     tts = TextToSpeech(
         models_dir=model_dir, use_deepspeed=use_deepspeed, kv_cache=kv_cache, half=half
     )
     print("Finished setting up tts object.")
+
+    # Generate a text stream
+    prompt = "Write a 4 sentence scifi story segment from the climax of a generation ship scifi thriller. Pay special attention to good sentence structure and avoid run-on sentences."
+    print(f"Prompt {prompt}")
+
+    text_generator = gpt4_generate(prompt)
+
     '''
+    text_ready = False
+    while not text_ready:
+        collect_text_segment(text_generator)
+        print("".join(text_generator))
+        time.sleep(0.1)
+    '''
+
+    generating = True
+    full_response = ""
+    buffer = list()
+    while generating:
+        try:
+            segment = next(text_generator)
+        except StopIteration:
+            segment = ""
+            generating = False
+            continue
+        # break the segment check out to a function
+        buffer.append(segment)
+        full_response += segment
+        if segment and segment[-1][-1] != '.' and len(segment) < 20:
+            continue
+        else:
+            joined_segment = "".join(buffer)
+            generate_audio(joined_segment)
+            buffer = list() # reset buffer
+
+    print(f"GPT-4 Response: {full_response}")
+
+    #prompt_input_loop() # TODO
 
     # this is for directly generating text, next we want to generate a separate prompt input loop.
     #manual_input_loop()
